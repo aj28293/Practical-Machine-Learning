@@ -1,0 +1,138 @@
+---
+title: "Coursera Practical Machine Learning - Course Project"
+author: "Andre Johnson"
+date: "Sunday, June 14, 2015"
+output: html_document
+---
+
+
+
+## **Overview**##
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+1. The submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+2. Apply the machine learning algorithm to the 20 test cases available in the test data above. Submit the predictions in appropriate format to the programming assignment for automated grading. 
+
+
+
+#**Setting up R Enviornment**#
+
+```{r}
+set.seed(1973)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(psych)
+```
+
+
+#**Loading and preprocessing the data**#
+
+
+First, download the data to working directory and read the csv files.
+
+```{r}
+setwd("C:/Users/User/Desktop/Coursera/Practical Machine Learning")
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(trainUrl, destfile="pml-training.csv", method="curl")
+download.file(testUrl, destfile="pml-testing.csv", method="curl")
+trainData <- read.csv("pml-training.csv", na.strings = c("NA", "", "#DIV/0!"))
+testData <- read.csv("pml-testing.csv", na.strings = c("NA", "", "#DIV/0!"))
+```
+
+Second, review the trainData file for dimensions and column names.
+
+```{r}
+dim(trainData)
+names(trainData)
+```
+
+Next, reviewing the column names it appears that the first 7 columns are related to category and subject and therefore unnecessary for building our model, so we take them out.
+
+```{r}
+
+trainData = trainData[,-c(1:7)]
+testData = testData[,-c(1:7)]
+dim(trainData)
+```
+
+Next, there are 153 columns remaining, so we need to clean these up further by eliminating columns which are missing a large number of entires, ie. NA.  
+
+```{r}
+trainDataDesc = describe(trainData)
+coltoElim = trainDataDesc[trainDataDesc$n<=450,][,1]
+trainData = trainData[,-coltoElim]
+testData = testData[,-coltoElim]
+dim(trainData)
+
+```
+#**Create new Training and Testing data sets**#
+
+With the data cleaned up in the "trainData"" set, create a training and test set.
+
+```{r}
+inTrain = createDataPartition(y=trainData$classe, p=0.7, list=FALSE)
+train = trainData[inTrain,]
+test = trainData[-inTrain,]
+dim(train)
+```
+
+#**Developing a Model**#
+
+Now that we have a train and test data set let's develop a predictive model using *Random Forest* to select relevant remaining variables in the train set against the **classe** variable and save the model.  We will use a 5-fold cross validation in the model.    
+
+
+```{r}
+#commented out and used saved model as too time consuming to run every time.
+#RFcontrol <- trainControl(method="cv", 5)
+#RFmodel = train(classe ~ ., method="rf", data=train, trControl=RFcontrol, ntree = 250)
+#saveRDS(RFmodel, "rfmodel.RDS")
+
+RFmodel = readRDS("rfmodel.RDS")
+RFmodel
+
+```
+
+Maximum accuracy is at mtry = 27 and is 98.95% with out of sample error of 1.05% which is a relatively good estimate.  
+
+Below is a plot of the random forest model.
+
+```{r}
+plot(RFmodel)
+```
+
+#**Testing and Evaluating the Model**#
+
+Now that we have created a model against the training data, let's test it against the test data set.
+
+```{r}
+confusionMatrix(test$classe, predict(RFmodel, test))
+RFModelAccuracy <- mean(predict(RFmodel, test) == test$classe) * 100
+```
+
+The estimated accuracy of the model is **`r RFModelAccuracy`%** when applied to the test data set with an out of sample error of **`r 100 - RFModelAccuracy`%**.  A plot of each variable is below.
+
+```{r}
+plot(varImp(RFmodel))
+```
+
+#**Conclusion**#
+
+A random forest trainer appears to work well in developing a model to predict against the data sets with an out of sample of only **`r 100 - RFModelAccuracy`%**.
+
+#**Appendix**#
+
+Below find a plot of a Decision Tree on the train data set.
+
+```{r}
+decTree <- rpart(classe ~ ., data=train, method="class")
+prp(decTree)
+```
